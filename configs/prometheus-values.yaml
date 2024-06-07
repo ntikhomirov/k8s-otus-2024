@@ -1,0 +1,56 @@
+prometheus:
+  prometheusSpec:
+    additionalScrapeConfigs:
+    - job_name: 'frontend'
+      static_configs:
+        - targets: ['frontend:80']
+    - job_name: 'productcatalogservice-exporter'
+      static_configs:
+        - targets: ['productcatalogservice-exporter:9100']
+
+additionalPrometheusRules:
+ - name: my-rule-file
+   groups:
+     - name: test
+       rules:
+         - alert: HaproxyServerDown
+           expr: haproxy_server_up != 0
+           for: 0m
+           labels:
+             severity: critical
+           annotations:
+             summary: HAProxy server down (instance {{ $labels.instance }})
+         #              description: HAProxy server is downn  VALUE = {{ $value }}n  LABELS: { { $labels } }
+
+         - alert: NodeNetworkInterfaceFlapping
+           expr: changes(node_network_up{device!~"veth.+",job="node-exporter"}[2m])> 2
+           for: 2m
+           labels:
+             severity: warning
+           annotations:
+             message: Network interface "{{ $labels.device }}" changing it's up status often on node-exporter {{ $labels.namespace }}/{{ $labels.pod }}"
+
+alertmanager:
+ config:
+   global:
+     resolve_timeout: 5m
+   route:
+     group_by: ['alertname', 'instance', 'job']
+     group_wait: 30s
+     group_interval: 5m
+     repeat_interval: 12h
+     receiver: 'null'
+     routes:
+       - match:
+           alertname: Watchdog
+         receiver: 'telegram'
+         continue: true
+       - match_re:
+           severity: ^(none|warning|critical)$
+         receiver: 'telegram'
+   receivers:
+     - name: 'telegram'
+       webhook_configs:
+         - url: 'http://telegram-alertmanager:8080/alerts'
+           send_resolved: true
+     - name: 'null'
