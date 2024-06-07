@@ -13,7 +13,9 @@ pipeline {
     }
 
     parameters {
-        booleanParam(name: 'DEBUG_MODE', defaultValue: false, description: 'Enable debug mode (set -x + extra information during runtime)')
+        booleanParam(name: 'DEBUG_MODE', defaultValue: false, description: 'Включение DEBUG для среды оболочки')
+        choice(name: "ms", choices: ["adservice", "cartservice", "checkoutservice", "currencyservice", "emailservice", "frontend", "loadgenerator", "paymentservice", "productcatalogservice", "recommendationservice", "shippingservice", "shoppingassistantservice"], description:  "Выбор миксросервиса")
+        string(name: "tag", defaultValue: "v1.0.0-demo", description: "Tag image")
     }
     stages {
 
@@ -28,7 +30,7 @@ pipeline {
     stage("Git clone"){
        steps {
               parallel(
-                  "Buil-Tool" : {
+                  "MS" : {
                       dir('ms') {
                           git (
                             url: 'https://github.com/ntikhomirov/k8s-otus-2024.git',
@@ -42,382 +44,67 @@ pipeline {
         }
       }
 
-      stage('Version Set'){
-          steps {
-                script{
-                     sh """
-                     #!/usr/bin/env bash
-                     if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                       set -xe
-                       export
-                     else
-                       set -e
-                     fi
-
-                     cd ./${MODULE_NAME}/
-                     # save info about build version
-                     if [[ ${'$'}{MANUAL_BUILD_VERSION} =~ auto* ]]
-                     then
-                        if [[ ${params.GIT_BRANCH} =~ "$BRANCH_MASTER" ]]
-                        then
-                            POM=`git log --name-only -n 1|grep 'pom.xml'|wc -l`
-
-                            if [ "${'$'}POM" -lt 1 ] ;
-                            then
-                              MERGE=`git log --name-only -n 1|grep 'Merge'|wc -l`
-                              if [ "${'$'}MERGE" -gt 1 ];
-                              then
-                                POM=`git log --name-only -n 2|grep 'pom.xml'|wc -l`
-                                if [ "${'$'}POM" -lt 1 ] ;
-                                then
-                                  echo "-- Для автоматической сборки из ветки мастер должен быть изменен pom.xml --"
-                                  exit 1
-                                fi
-                              else
-                                echo "-- Для автоматической сборки из ветки мастер должен быть изменен pom.xml --"
-                                exit 1
-                              fi
-                            fi
-                        fi
-                        echo `grep "<revision>[0-9]*\\.[0-9]*\\.[0-9]*</revision>" ./pom.xml | sed "s|[\\ |<|>|revision\\/]||g"` > ../version.txt
-
-                     else
-                       echo -n ${'$'}{MANUAL_BUILD_VERSION} > ../version.txt
-                     fi
-
-                     cd ..
-
-                     version=`cat version.txt`
-
-                     echo ${'$'}version
-
-                     if curl -k -v -u "${CRED_NEXUS_CI_USER}:${CRED_NEXUS_CI_PASS}" --output /dev/null --silent --head --fail "${'$'}{NEXUS_MAVEN_PULL}supply/${AC_PREFIX}/${MODULE_NAME}/${'$'}version/${MODULE_NAME}-${'$'}version.zip.sha1"; then
-                        if [[ ${params.GIT_BRANCH} =~ "$BRANCH_MASTER" ]]
-                        then
-                           echo "Данная версия из мастера уже существует в Nexus Distr"
-                           exit 1
-                        elif [[ ${params.GIT_BRANCH} == "$BRANCH_RELEASE"* ]]
-                        then
-                           cd ./$MODULE_NAME/
-                           echo `grep "<revision>[0-9]*\\.[0-9]*\\.[0-9]*</revision>" pom.xml | sed "s|[\\ |<|>|revision\\/]||g"|awk -F "." '{print ${'$'}1,${'$'}2,${'$'}3+1}'|sed 's| |.|g'` > ../version.txt
-                           cd ../
-                           version=`cat version.txt`
-                           if curl -k -v -u "${CRED_NEXUS_CI_USER}:${CRED_NEXUS_CI_PASS}" --output /dev/null --silent --head --fail "${'$'}{NEXUS_MAVEN_PULL}supply/${AC_PREFIX}/${MODULE_NAME}/${'$'}version/${MODULE_NAME}-${'$'}version.zip.sha1"; then
-                              echo "Версия была UP на +1, но она также присутствует в Nexus Distr!"
-                              exit 1
-                           fi
-
-                           sed -i "s|<revision>[0-9]*\\.[0-9]*\\.[0-9]*</revision>|<revision>${'$'}version</revision>|1" ./$MODULE_NAME/pom.xml
-                        fi
-
-                     fi
-
-                     version=`cat version.txt`
-
-                     echo ${'$'}version
-
-                     """.stripIndent()
-                 }
-            }
-        }
-
-        stage('Clean Maven'){
-           steps {
-                script{
-                    sh """
-                    #!/usr/bin/env bash
-                    if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                      set -xe
-                      export
-                    else
-                      set -e
-                    fi
-
-                    if [[ ${'$'}CLEAN_MAVEN_DIR == "true" ]]; then
-                        if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                          set -x
-                        else
-                          set -e
-                        fi
-
-                      echo "----------- Чистка репозитория MAVEN ----------"
-                      export M2_HOME=${'$'}MAVEN_TOOL
-                      export M2=${'$'}M2_HOME/bin
-                      export MAVEN_OPTS=${'$'}JAVA_OPTS
-                      export PATH=${'$'}M2:${'$'}PATH
-
-                      rm -rf /app/jenkins-agent/.m2/
-
-                      cd ./core-is
-
-                      mvn clean -f "pom.xml" -P clean-repo -s ../build-tool/maven-settings.xml
-
-                    fi
-
-                    """.stripIndent()
-                }
-           }
-        }
-
-        stage('TEST'){
+      stage('TEST'){
           environment {
-               PPQC_HOST = 'https://scancode.sfera.inno.local/quality-scanner-api'
-               GIT_URL = 'https://git.sfera.inno.local/${PROJECT}/core-is.git'
-               GIT_BRANCH = "${params.GIT_BRANCH}"
-               POM_DIR = 'core-is'
-               GIT_PRIVATE_KEY_ID = 'test_ssh'
-               DIL_CRED_ID = 'ci_si_IBRB'
-               GIT_TOKEN_ID = 'SonarQube'
-               SAST_DIRECTORY_SCAN = 'java'
-               SAST_DELIMITR = '|'
-               SAST_DEBUG_LOG = "True"
-               SAST_SYNCHRONOUS_SCAN = "True"
-               SAST_DIRECTORY_CONDITION = "None"
-               SAST_GROUP_PROJECT = "IBRB(1488)"
-               SAST_PROJECT = "core-is"
-               SAST_LANG_SCAN = "all_lang"
-               APPSEC_TEAM_NEXUS_CREDS = credentials('ci_si_IBRB')
                SSH_CRED = 'test_ssh'
            }
            steps {
                   parallel(
-                    "Maven" : {
-                    script {
-                      try {
-                            sh """
-                            #!/usr/bin/env bash
-                            if [[ ${'$'}{MAVEN_TEST} == "true" ]]; then
-                                if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                                  set -xe
-                                else
-                                  set -e
-                                fi
-
-                                export M2_HOME=${'$'}MAVEN_TOOL
-                                export M2=${'$'}M2_HOME/bin
-                                export MAVEN_OPTS=${'$'}JAVA_OPTS
-                                export PATH=${'$'}M2:${'$'}PATH
-
-                                cd ./core-is
-
-                                echo "!----------------- RUN UNIT TEST -------------------!"
-                                mvn clean install -f "pom.xml" -P run-tests -X -s ../build-tool/maven-settings.xml
-                            fi
-                            """.stripIndent()
-
-                            } catch (Exception e) {
-                                echo "Произошло исключение: ${e.message}"
-                            }
-                        }
-                    },
                     "SonarQube" : {
-                        script {
-                          try {
-                          withCredentials([string(credentialsId: "${GIT_TOKEN_ID}", variable: 'TOKEN')]) {
-                              dir("${POM_DIR}") {
-
-                                  sh """
-                                  #!/usr/bin/env bash
-                                  if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                                    set -xe
-                                    export
-                                  else
-                                    set -e
-                                  fi
-
-                                  if [[ ${'$'}{SonarQube} == "true" ]]; then
-
-                                      export M2_HOME=${'$'}MAVEN_TOOL
-                                      export M2=${'$'}M2_HOME/bin
-                                      export MAVEN_OPTS=${'$'}JAVA_OPTS
-                                      export PATH=${'$'}M2:${'$'}PATH
-                                      export JAVA_HOME=${'$'}JAVA_HOME_11
-
-                                      mvn verify sonar:sonar \
-                                      -Dsonar.projectKey=${PROJECT}:::${REPO}:::${BRANCH} \
-                                      -Dsonar.host.url=${PPQC_HOST} \
-                                      -Dsonar.login=${TOKEN} \
-                                      -s ../build-tool/maven-settings.xml
-
-                                  fi
-                                  """.stripIndent()
-
-                              }
-                          }
-                          } catch (Exception e) {
-                              echo "Произошло исключение: ${e.message}"
-                          }
-
-                      }
+                        script{
+                          echo "Должен запуститься Sonar для проверки кода"
+                        }
                       },
 
                       "SAST" : {
                         script {
-                          if (params.SAST) {
-                             try {
-                              global_appsec_check_sast_solar_linux_v2_module.solar_sfera_sast(APPSEC_TEAM_NEXUS_CREDS_USR,APPSEC_TEAM_NEXUS_CREDS_PSW,SAST_DEBUG_LOG,SAST_SYNCHRONOUS_SCAN,SAST_DIRECTORY_CONDITION,SAST_DIRECTORY_SCAN,SAST_DELIMITR,SAST_LANG_SCAN,SAST_PROJECT,SAST_GROUP_PROJECT)
-                             } catch (Exception e) {
-                                echo "Произошло исключение: ${e.message}"
-                             }
-                          }else{
-                             echo "Проверка отключена"
+                             echo "Проверка SAST"
                           }
                         }
-
-                     }
                   )
               }
 
         }
 
-        stage('Build') {
+      stage('Build') {
+          steps {
+              script {
+              sh """
+                #!/usr/bin/env bash
+                if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                  set -xe
+                else
+                  set -e
+                fi
+
+                cd ms/project/microservices/src/${ms}
+                docker build -t docker.nt33.ru/${ms}:${tag} .
+
+                """.stripIndent()
+              }
+          }
+      }
+
+      stage('Nexus push image') {
             steps {
                 script {
-                    sh """
-                    if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                      set -x
-                    else
-                      set -e
-                    fi
-
-                    export M2_HOME=${'$'}MAVEN_TOOL
-                    export M2=${'$'}M2_HOME/bin
-                    export MAVEN_OPTS=${'$'}JAVA_OPTS
-                    export PATH=${'$'}M2:${'$'}PATH
-
-                    if [[ ! -d ${MODULE_NAME}/ ]]; then mkdir -p ${MODULE_NAME}/; fi
-                    export SUPPLYVERSION=${'$'}(cat version.txt)
-
-                    cd ./core-is
-
-                    if [[ ${'$'}MAVEN_DEBUG == "true" ]]; then
-                      mvn help:evaluate clean package -f "pom.xml" -q -DforceStdout -X -s ../build-tool/maven-settings.xml
-                    else
-                      mvn help:evaluate clean package -f "pom.xml" -q -DforceStdout -s ../build-tool/maven-settings.xml
-                    fi
-                    """.stripIndent()
-                    }
-                }
-            }
-
-        stage('Prepare_Artifacts') {
-            steps {
-                script {
-                  sh """
+                sh """
                   #!/usr/bin/env bash
                   if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
                     set -xe
-                    export
                   else
                     set -e
                   fi
 
-                  if [[ ! -d ./tmpBuild/Supply/Deployment/files/ ]]; then mkdir -p ./tmpBuild/Supply/Deployment/files/; fi
-                  mkdir -p ./tmpBuild/Docs
+                  docker push docker.nt33.ru/${ms}:${tag}
 
-                  cp ./version.txt ./tmpBuild/Docs
-
-                  cp core-is/core-is-mb/target/core-is-mb.jar ./tmpBuild/Supply/Deployment/files/
-                  cp core-is/core-is-backend/target/core-is-backend.jar ./tmpBuild/Supply/Deployment/files/
-                  cp core-is/core-is-ib/target/core-is-ib.jar ./tmpBuild/Supply/Deployment/files/
-
-                  cd ./tmpBuild/
-                  zip -9 -r supply.zip  ./Supply
-                  zip -9 -r supply.zip  ./Docs
-
-                  cp ./supply.zip ../
                   """.stripIndent()
+                }
               }
 
-            }
+      }
 
-        }
+  }
 
-        stage("SupplyToNexus"){
-              steps {
-                script {
-                    sh """
-                    #!/usr/bin/env bash
-                    if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                      set -xe
-                      export
-                    else
-                      set -e
-                    fi
-
-                    export M2_HOME=${'$'}MAVEN_TOOL
-                    export M2=${'$'}M2_HOME/bin
-                    export MAVEN_OPTS="-Xmx512M"
-                    export PATH=${'$'}M2:${'$'}PATH
-                    export SUPPLYVERSION=${'$'}(cat version.txt)
-
-                    mvn deploy:deploy-file -DgroupId=supply.ibrb -DartifactId=core-is -Dversion=${'$'}SUPPLYVERSION-SNAPSHOT -DgeneratePom=false -Dpackaging=zip -DrepositoryId=nexus-push -Dmaven.wagon.http.ssl.insecure=true -Durl="$NEXUS_MAVEN_PUSH_CI" -Dfile=supply.zip --settings ./build-tool/maven-settings.xml --log-file maven.log
-
-                    URL=`grep "\\[INFO\\] Uploading to nexus-push: " maven.log |grep '.zip'|sed 's|.*https||'`
-
-                    export auth=`echo -n '$NEXUS_CREDS_USR:$NEXUS_CREDS_PSW' | base64`
-
-                    curl -v -H "Authorization: Basic ${'$'}auth" s-X GET "https${'$'}URL.sha1" > sha1.txt
-
-                    """.stripIndent()
-                     SHA1 = readFile('sha1.txt')
-                     VERSION = readFile('version.txt')
-                     currentBuild.displayName = "# ${VERSION}: ${SHA1}"
-                     currentBuild.result = 'SUCCESS'
-
-               }
-            }
-        }
-
-        stage("Up version Git"){
-              steps {
-                script {
-                    sh """
-                    #!/usr/bin/env bash
-                    if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                      set -xe
-                      export
-                    else
-                      set -e
-                    fi
-
-                    if [[ ${params.GIT_BRANCH} == "$BRANCH_RELEASE"* ]]
-                    then
-                       version=`cat version.txt`
-                       sha1=`cat sha1.txt`
-                       cd ./$MODULE_NAME/
-                       ls -axl
-                       cat pom.xml
-                       git status
-                       git add pom.xml
-                       git commit -m "Up version - ${'$'}version;SHA1:${'$'}sha1"
-                       git config --global user.name $NEXUS_CREDS_USR
-
-
-                    fi
-                    cd ..
-                    """.stripIndent()
-                    withCredentials([usernamePassword( credentialsId: "$JENKINS_CRED", passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
-
-                        def encodedPassword = URLEncoder.encode("$GIT_PASSWORD",'UTF-8')
-                        def encodeUser = URLEncoder.encode("$GIT_USERNAME",'UTF-8')
-                        maskPasswords(varPasswordPairs: [[var: 'encodedPassword']]){
-                          sh("cd $MODULE_NAME ; git push https://$encodeUser:$encodedPassword@git.sfera.inno.local/ibrb/core-is.git")
-                        }
-                    }
-
-               }
-            }
-            post {
-                  always {
-                      archiveArtifacts artifacts: "supply.zip, version.txt, sha1.txt",  followSymlinks: false
-                  }
-            }
-        }
-
-    }
-
-
-    //-- Шаблон сборки из ветки developer --//
 
 }
