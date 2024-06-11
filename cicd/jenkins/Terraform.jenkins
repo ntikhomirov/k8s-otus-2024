@@ -49,21 +49,15 @@ pipeline {
       stage('Config'){
            steps {
                 script{
+                if ( env.Config == true ){
                 sh """
-                  #!/usr/bin/env bash
-                  if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
-                    set -xe
-                  else
-                    set -e
-                  fi
-
                   rm -rf ~/terraform
                   mkdir -p ~/terraform
                   cp -ra ms/iac/terraform/* ~/terraform
                   cd ~/terraform
                   terraform init
-
                 """.stripIndent()
+                }
                 }
 
            }
@@ -74,15 +68,16 @@ pipeline {
           steps {
               script {
               sh """
-                #!/usr/bin/env bash
-                if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                if [ ${'$'}{DEBUG_MODE}="true" ]; then
                   set -xe
                 else
                   set -e
                 fi
 
-                cp -rf ms/iac/terraform/*.tf ~/terraform
-                cp -rf ms/iac/terraform/*.tfvars ~/terraform
+                if [ ${'$'}{Update}="true" ]; then
+                  cp -rf ms/iac/terraform/*.tf ~/terraform
+                  cp -rf ms/iac/terraform/*.tfvars ~/terraform
+                fi
 
                 """.stripIndent()
               }
@@ -93,19 +88,21 @@ pipeline {
             steps {
                 script {
                 sh """
-                  #!/usr/bin/env bash
-                  if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                  if [ ${'$'}{DEBUG_MODE}="true" ]; then
                     set -xe
                   else
                     set -e
                   fi
 
-                  cd ~/terraform
-                  terraform apply --auto-approve
+                  if [ ${'$'}{Apply}="true" ]; then
+                    cd ~/terraform
+                    export TF_VAR_yc_token=`yc iam create-token`
+                    terraform apply --auto-approve
+                  fi
 
                   """.stripIndent()
                 }
-              }
+           }
 
       }
 
@@ -113,16 +110,17 @@ pipeline {
             steps {
                 script {
                 sh """
-                  #!/usr/bin/env bash
-                  if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                  if [ ${'$'}{DEBUG_MODE}="true" ]; then
                     set -xe
                   else
                     set -e
                   fi
 
-                  cd ~/terraform
-                  terraform destroy --auto-approve
-
+                  if [ ${'$'}{Destroy}="true" ]; then
+                    cd ~/terraform
+                    export TF_VAR_yc_token=`yc iam create-token`
+                    terraform destroy --auto-approve
+                  fi
                   """.stripIndent()
                 }
               }
