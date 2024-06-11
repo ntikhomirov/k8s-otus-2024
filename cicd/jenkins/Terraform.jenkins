@@ -1,0 +1,135 @@
+// Main pipeline
+pipeline {
+    //agent any
+    agent any
+
+    options {
+        buildDiscarder logRotator(artifactDaysToKeepStr: '14', artifactNumToKeepStr: '10', daysToKeepStr: '30', numToKeepStr: '50')
+        disableConcurrentBuilds()
+        disableResume()
+        skipDefaultCheckout true
+        timeout(activity: true, time: 60)
+        parallelsAlwaysFailFast()
+    }
+
+    parameters {
+        booleanParam(name: 'DEBUG_MODE', defaultValue: false, description: 'Включение DEBUG для среды оболочки')
+        booleanParam(name: "Config", defaultValue: "false", description: "Конфигурация/Реконфигурация окружения terraform")
+        booleanParam(name: "Update", defaultValue: "false", description: "Обновление скриптов развертывания terraform")
+        booleanParam(name: "Apply", defaultValue: "false", description: "Инсталяция кластера k8s")
+        booleanParam(name: "Destroy", defaultValue: "false", description: "Удаление кластера k8s")
+    }
+    stages {
+
+    //-- Шаблон сборки из ветки developer --//
+
+    stage('Prepare build scenario') {
+      steps {
+        cleanWs()
+      }
+    }
+
+    stage("Git clone"){
+       steps {
+              parallel(
+                  "MS" : {
+                      dir('ms') {
+                          git (
+                            url: 'https://github.com/ntikhomirov/k8s-otus-2024.git',
+                            branch: 'main',
+                            changelog: false,
+                            poll: false,
+                          )
+                      }
+                  }
+              )
+        }
+      }
+
+      stage('Config'){
+           steps {
+                script{
+                sh """
+                  #!/usr/bin/env bash
+                  if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                    set -xe
+                  else
+                    set -e
+                  fi
+
+                  rm -rf ~/terraform
+                  mkdir -p ~/terraform
+                  cp -ra ms/iac/terraform/* ~/terraform
+                  cd ~/terraform
+                  terraform init
+
+                """.stripIndent()
+                }
+
+           }
+
+      }
+
+      stage('Update') {
+          steps {
+              script {
+              sh """
+                #!/usr/bin/env bash
+                if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                  set -xe
+                else
+                  set -e
+                fi
+
+                cp -rf ms/iac/terraform/*.tf ~/terraform
+                cp -rf ms/iac/terraform/*.tfvars ~/terraform
+
+                """.stripIndent()
+              }
+          }
+      }
+
+      stage('Apply') {
+            steps {
+                script {
+                sh """
+                  #!/usr/bin/env bash
+                  if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                    set -xe
+                  else
+                    set -e
+                  fi
+
+                  cd ~/terraform
+                  terraform apply --auto-approve
+
+                  """.stripIndent()
+                }
+              }
+
+      }
+
+      stage('Destroy') {
+            steps {
+                script {
+                sh """
+                  #!/usr/bin/env bash
+                  if [[ ${'$'}{DEBUG_MODE} == "true" ]]; then
+                    set -xe
+                  else
+                    set -e
+                  fi
+
+                  cd ~/terraform
+                  terraform destroy --auto-approve
+
+                  """.stripIndent()
+                }
+              }
+
+      }
+
+  }
+
+
+}
