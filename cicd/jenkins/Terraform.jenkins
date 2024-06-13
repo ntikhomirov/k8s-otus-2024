@@ -67,19 +67,12 @@ pipeline {
       stage('Update') {
           steps {
               script {
+              if (env.Update == true){
               sh """
-                if [ ${'$'}{DEBUG_MODE}="true" ]; then
-                  set -xe
-                else
-                  set -e
-                fi
-
-                if [ ${'$'}{Update}="true" ]; then
                   cp -rf ms/iac/terraform/*.tf ~/terraform
                   cp -rf ms/iac/terraform/*.tfvars ~/terraform
-                fi
-
                 """.stripIndent()
+              }
               }
           }
       }
@@ -87,20 +80,13 @@ pipeline {
       stage('Apply') {
             steps {
                 script {
+                if (env.Apply == true ){
                 sh """
-                  if [ ${'$'}{DEBUG_MODE}="true" ]; then
-                    set -xe
-                  else
-                    set -e
-                  fi
-
-                  if [ ${'$'}{Apply}="true" ]; then
                     cd ~/terraform
                     export TF_VAR_yc_token=`yc iam create-token`
                     terraform apply --auto-approve
-                  fi
-
                   """.stripIndent()
+                }
                 }
            }
 
@@ -109,19 +95,13 @@ pipeline {
       stage('Destroy') {
             steps {
                 script {
+                if (env.Destroy == true ){
                 sh """
-                  if [ ${'$'}{DEBUG_MODE}="true" ]; then
-                    set -xe
-                  else
-                    set -e
-                  fi
-
-                  if [ ${'$'}{Destroy}="true" ]; then
                     cd ~/terraform
                     export TF_VAR_yc_token=`yc iam create-token`
                     terraform destroy --auto-approve
-                  fi
                   """.stripIndent()
+                }  
                 }
               }
 
