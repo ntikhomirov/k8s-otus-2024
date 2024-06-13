@@ -95,13 +95,13 @@ pipeline {
       stage('Destroy') {
             steps {
                 script {
-                if (env.Destroy == true ){
+                if (env.Destroy == 'true' ){
                 sh """
                     cd ~/terraform
                     export TF_VAR_yc_token=`yc iam create-token`
                     terraform destroy --auto-approve
                   """.stripIndent()
-                }  
+                }
                 }
               }
 
