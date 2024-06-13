@@ -49,7 +49,7 @@ pipeline {
       stage('Config'){
            steps {
                 script{
-                if ( env.Config == true ){
+                if ( env.Config == 'true' ){
                 sh """
                   rm -rf ~/terraform
                   mkdir -p ~/terraform
@@ -67,7 +67,7 @@ pipeline {
       stage('Update') {
           steps {
               script {
-              if (env.Update == true){
+              if ( env.Update == 'true' ){
               sh """
                   cp -rf ms/iac/terraform/*.tf ~/terraform
                   cp -rf ms/iac/terraform/*.tfvars ~/terraform
@@ -80,7 +80,7 @@ pipeline {
       stage('Apply') {
             steps {
                 script {
-                if (env.Apply == true ){
+                if ( env.Apply == 'true' ){
                 sh """
                     cd ~/terraform
                     export TF_VAR_yc_token=`yc iam create-token`
