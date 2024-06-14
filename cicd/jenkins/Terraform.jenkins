@@ -19,6 +19,9 @@ pipeline {
         booleanParam(name: "Apply", defaultValue: "false", description: "Инсталяция кластера k8s")
         booleanParam(name: "Destroy", defaultValue: "false", description: "Удаление кластера k8s")
     }
+    environment{
+      PASSWORD = credentials('nexus-nt33')
+    }
     stages {
 
     //-- Шаблон сборки из ветки developer --//
@@ -85,6 +88,7 @@ pipeline {
                     cd ~/terraform
                     export TF_VAR_yc_token=`yc iam create-token`
                     terraform apply --auto-approve
+                    kubectl create secret docker-registry nexus-nt33 --docker-server=docker.nt33.ru --docker-username=$PASSWORD_USR --docker-password=$PASSWORD_PSW --docker-email=tihomirovnv@gmail.com
                   """.stripIndent()
                 }
                 }

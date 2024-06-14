@@ -30,6 +30,8 @@ WORKDIR /src
 COPY --from=builder /productcatalogservice ./server
 COPY ./node_exporter-1.8.1.linux-amd64/node_exporter /node_exporter
 COPY ./start.sh /start.sh
+RUN chmod +x /start.sh
+RUN chmod +x /node_exporter
 COPY products.json .
 
 # Definition of this variable is used by 'skaffold debug' to identify a golang binary.

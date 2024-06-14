@@ -77,7 +77,7 @@ pipeline {
                   set -e
                 fi
 
-                cd ms/project/microservices/src/${ms}/src/
+                cd ms/project/microservices/src/${ms}
                 docker build -t docker.nt33.ru/${ms}:${tag} .
 
                 """.stripIndent()
