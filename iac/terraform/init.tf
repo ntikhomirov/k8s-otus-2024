@@ -30,7 +30,7 @@ module "yc-vpc" {
 }
 
 module "kube" {
-  cluster_version = "1.26"
+  cluster_version = "1.28"
   cluster_name = var.k8s_cluster_name
   source     = "github.com/terraform-yc-modules/terraform-yc-kubernetes.git"
   network_id = module.yc-vpc.vpc_id
