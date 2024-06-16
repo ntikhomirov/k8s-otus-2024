@@ -12,8 +12,8 @@ loki:
     type: 's3'
     s3:
       endpoint: storage.yandexcloud.net
-      secretAccessKey: {{ .Values.env.secretAccessKey }}
-      accessKeyId: {{ .Values.env.accessKeyId }}
+      secretAccessKey: ""
+      accessKeyId: ""
   auth_enabled: false
   commonConfig:
     replication_factor: 1

@@ -54,13 +54,13 @@ pipeline {
            steps {
                 script{
 
-                    if ( env.Install == 'true' or (env.Delete == 'true' and env.Update == 'true' ) ){
+                    if ( ( env.Install == 'true' ) || ( env.Delete == 'true' && env.Update == 'true' ) ){
                         sh """
                         helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
                         helm repo add grafana https://grafana.github.io/helm-charts
                         helm repo update
-                        if [ ! `kubectl get ns|grep ${$}namespace` ] ; then
-                            kubectl create ns ${$}namespace
+                        if [ ! `kubectl get ns|grep ${'$'}namespace` ] ; then
+                            kubectl create ns ${'$'}namespace
                         fi
                         """.stripIndent()
                     }
@@ -74,12 +74,16 @@ pipeline {
       stage('Delete') {
           steps {
               script {
-                if ( env.Delete == 'true' or env.Install ){
-                  sh """
-                      helm delete loki --namespace=${$}namespace
-                      helm delete prometheus --namespace=${$}namespace
-                      kubectl delete ns ${$}namespace
-                    """.stripIndent()
+                if ( env.Delete == 'true' || env.Install ){
+                  try {
+                    sh """
+                        helm delete loki --namespace=${'$'}namespace
+                        helm delete prometheus --namespace=${'$'}namespace
+                        kubectl delete ns ${'$'}namespace --force
+                      """.stripIndent()
+                  } catch (Exception e) {
+                      echo "Произошло исключение: ${e.message}"
+                  }
                 }
               }
           }
@@ -88,10 +92,11 @@ pipeline {
       stage('Install') {
             steps {
                 script {
-                if ( env.Install == 'true' or (env.Delete == 'true' and env.Update == 'true' ) ){
+                if ( env.Install == 'true' || (env.Delete == 'true' && env.Update == 'true' ) ){
                 sh """
-                helm upgrade --install --namespace=${$}namespace prometheus prometheus-community/prometheus --values=configs/prometheus-values.yaml
-                helm upgrade --install --namespace=${$}namespace grafana/loki-stack --values=configs/loki-value.yaml --set grafana.enabled=false
+                export
+                helm upgrade --install --namespace=${'$'}namespace prometheus prometheus-community/kube-prometheus-stack --values=ms/configs/prometheus-values.yaml
+                helm upgrade --install --namespace=${'$'}namespace loki grafana/loki-stack --values=ms/configs/loki-value.yaml --set grafana.enabled=false --set loki.storage.s3.secretAccessKey=${'$'}secretAccessKey --set loki.storage.s3.accessKeyId=${'$'}accessKeyId
                 """.stripIndent()
                 }
                 }
@@ -102,10 +107,10 @@ pipeline {
       stage('Update') {
             steps {
                 script {
-                if (env.Update == 'true' and env.Delete == 'false'){
+                if (env.Update == 'true' && env.Delete == 'false'){
                 sh """
-                helm upgrade --namespace=${$}namespace prometheus prometheus-community/prometheus --values=configs/prometheus-values.yaml
-                helm upgrade --namespace=${$}namespace grafana/loki-stack --values=configs/loki-value.yaml --set grafana.enabled=false
+                helm upgrade --namespace=${'$'}namespace prometheus prometheus-community/kube-prometheus-stack --values=ms/configs/prometheus-values.yaml
+                helm upgrade --namespace=${'$'}namespace loki grafana/loki-stack --values=ms/configs/loki-value.yaml --set grafana.enabled=false --set loki.storage.s3.secretAccessKey=${'$'}secretAccessKey --set loki.storage.s3.accessKeyId=${'$'}accessKeyId
                 """.stripIndent()
                 }
                 }
