@@ -20,6 +20,8 @@ pipeline {
     environment{
       PASSWORD = credentials('nexus-nt33')
       namespace = "monitoring"
+      secretAccessKey = credentials('secretAccessKey')
+      accessKeyId = credentials('accessKeyId')
     }
     stages {
 
