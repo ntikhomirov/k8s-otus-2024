@@ -74,12 +74,11 @@ pipeline {
       stage('Delete') {
           steps {
               script {
-                if ( env.Delete == 'true' || env.Install ){
+                if ( env.Delete == 'true' || env.Install == 'true' ){
                   try {
                     sh """
                         helm delete loki --namespace=${'$'}namespace
                         helm delete prometheus --namespace=${'$'}namespace
-                        kubectl delete ns ${'$'}namespace --force
                       """.stripIndent()
                   } catch (Exception e) {
                       echo "Произошло исключение: ${e.message}"

@@ -1,0 +1,108 @@
+// Main pipeline
+pipeline {
+    //agent any
+    agent any
+
+    options {
+        buildDiscarder logRotator(artifactDaysToKeepStr: '14', artifactNumToKeepStr: '10', daysToKeepStr: '30', numToKeepStr: '50')
+        disableConcurrentBuilds()
+        disableResume()
+        skipDefaultCheckout true
+        timeout(activity: true, time: 60)
+        parallelsAlwaysFailFast()
+    }
+
+    parameters {
+        booleanParam(name: "Delete", defaultValue: "false", description: "Удаление ms")
+        booleanParam(name: "Apply", defaultValue: "false", description: "Обновление ms средствами kubectl")
+    }
+    environment{
+      PASSWORD = credentials('nexus-nt33')
+      namespace = "workspace"
+    }
+    stages {
+
+    //-- Шаблон сборки из ветки developer --//
+
+    stage('Prepare build scenario') {
+      steps {
+        cleanWs()
+      }
+    }
+
+    stage("Git clone"){
+       steps {
+              parallel(
+                  "MS" : {
+                      dir('ms') {
+                          git (
+                            url: 'https://github.com/ntikhomirov/k8s-otus-2024.git',
+                            branch: 'main',
+                            changelog: false,
+                            poll: false,
+                          )
+                      }
+                  }
+              )
+        }
+      }
+
+      stage('Delete') {
+          steps {
+              script {
+                if ( env.Delete == 'true' ){
+                  try {
+                    sh """
+                        kubectl delete -f ms/project/microservices/kubernetes-manifests/ -n ${'$'}namespace
+                      """.stripIndent()
+                  } catch (Exception e) {
+                      echo "Произошло исключение: ${e.message}"
+                  }
+                }
+              }
+          }
+      }
+
+      stage('Prepare'){
+           steps {
+                script{
+
+                    if ( env.Apply == 'true' ){
+                        sh """
+                        if [ ! `kubectl get ns|grep ${'$'}namespace` ] ; then
+                            kubectl create ns ${'$'}namespace
+                        fi
+
+                        if [ ! `kubectl get secret nexus-nt33 -n ${'$'}namespace` ] ; then
+                            kubectl create secret docker-registry nexus-nt33 --docker-server=docker.nt33.ru --docker-username=$PASSWORD_USR --docker-password=$PASSWORD_PSW --docker-email=tihomirovnv@gmail.com -n workspace
+                        fi
+                        """.stripIndent()
+                    }
+
+                }
+
+           }
+
+      }
+
+
+
+      stage('Apply') {
+            steps {
+                script {
+                if ( env.Apply == 'true' ){
+                sh """
+                export
+                kubectl delete -f ms/project/microservices/kubernetes-manifests/ -n ${'$'}namespace
+                """.stripIndent()
+                }
+                }
+           }
+
+      }
+
+
+  }
+
+
+}
