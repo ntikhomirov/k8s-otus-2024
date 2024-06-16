@@ -93,7 +93,7 @@ pipeline {
                 if ( env.Apply == 'true' ){
                 sh """
                 export
-                kubectl delete -f ms/project/microservices/kubernetes-manifests/ -n ${'$'}namespace
+                kubectl apply -f ms/project/microservices/kubernetes-manifests/ -n ${'$'}namespace
                 """.stripIndent()
                 }
                 }
