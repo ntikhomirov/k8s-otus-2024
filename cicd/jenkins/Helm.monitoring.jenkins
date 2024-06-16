@@ -1,0 +1,117 @@
+// Main pipeline
+pipeline {
+    //agent any
+    agent any
+
+    options {
+        buildDiscarder logRotator(artifactDaysToKeepStr: '14', artifactNumToKeepStr: '10', daysToKeepStr: '30', numToKeepStr: '50')
+        disableConcurrentBuilds()
+        disableResume()
+        skipDefaultCheckout true
+        timeout(activity: true, time: 60)
+        parallelsAlwaysFailFast()
+    }
+
+    parameters {
+        booleanParam(name: "Delete", defaultValue: "false", description: "Удаление Prometheus/Loki")
+        booleanParam(name: "Install", defaultValue: "false", description: "Установка Prometheus/Loki")
+        booleanParam(name: "Update", defaultValue: "false", description: "Обновление Prometheus/Loki")
+    }
+    environment{
+      PASSWORD = credentials('nexus-nt33')
+      namespace = "monitoring"
+    }
+    stages {
+
+    //-- Шаблон сборки из ветки developer --//
+
+    stage('Prepare build scenario') {
+      steps {
+        cleanWs()
+      }
+    }
+
+    stage("Git clone"){
+       steps {
+              parallel(
+                  "MS" : {
+                      dir('ms') {
+                          git (
+                            url: 'https://github.com/ntikhomirov/k8s-otus-2024.git',
+                            branch: 'main',
+                            changelog: false,
+                            poll: false,
+                          )
+                      }
+                  }
+              )
+        }
+      }
+
+      stage('Prepare'){
+           steps {
+                script{
+
+                    if ( env.Install == 'true' or (env.Delete == 'true' and env.Update == 'true' ) ){
+                        sh """
+                        helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                        helm repo add grafana https://grafana.github.io/helm-charts
+                        helm repo update
+                        if [ ! `kubectl get ns|grep ${$}namespace` ] ; then
+                            kubectl create ns ${$}namespace
+                        fi
+                        """.stripIndent()
+                    }
+
+                }
+
+           }
+
+      }
+
+      stage('Delete') {
+          steps {
+              script {
+                if ( env.Delete == 'true' or env.Install ){
+                  sh """
+                      helm delete loki --namespace=${$}namespace
+                      helm delete prometheus --namespace=${$}namespace
+                      kubectl delete ns ${$}namespace
+                    """.stripIndent()
+                }
+              }
+          }
+      }
+
+      stage('Install') {
+            steps {
+                script {
+                if ( env.Install == 'true' or (env.Delete == 'true' and env.Update == 'true' ) ){
+                sh """
+                helm upgrade --install --namespace=${$}namespace prometheus prometheus-community/prometheus --values=configs/prometheus-values.yaml
+                helm upgrade --install --namespace=${$}namespace grafana/loki-stack --values=configs/loki-value.yaml --set grafana.enabled=false
+                """.stripIndent()
+                }
+                }
+           }
+
+      }
+
+      stage('Update') {
+            steps {
+                script {
+                if (env.Update == 'true' and env.Delete == 'false'){
+                sh """
+                helm upgrade --namespace=${$}namespace prometheus prometheus-community/prometheus --values=configs/prometheus-values.yaml
+                helm upgrade --namespace=${$}namespace grafana/loki-stack --values=configs/loki-value.yaml --set grafana.enabled=false
+                """.stripIndent()
+                }
+                }
+              }
+
+      }
+
+  }
+
+
+}

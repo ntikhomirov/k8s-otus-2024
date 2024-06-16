@@ -68,6 +68,8 @@ spec:
         env:
         - name: FRONTEND_ADDR
           value: "frontend:80"
+      imagePullSecrets:
+      - name: nexus-nt33
       containers:
       - name: main
         securityContext:
@@ -77,7 +79,7 @@ spec:
               - ALL
           privileged: false
           readOnlyRootFilesystem: true
-        image: docker-nexus.bscmsc.ru/ntikhomirov/loadgenerator:v0.1.0-demo
+        image: docker.nt33.ru/loadgenerator:v1.0.0
         env:
         - name: FRONTEND_ADDR
           value: "frontend:80"

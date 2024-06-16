@@ -33,6 +33,8 @@ spec:
         runAsGroup: 1000
         runAsNonRoot: true
         runAsUser: 1000
+      imagePullSecrets:
+      - name: nexus-nt33
       containers:
         - name: server
           securityContext:
@@ -42,7 +44,7 @@ spec:
                 - ALL
             privileged: false
             readOnlyRootFilesystem: true
-          image: docker-nexus.bscmsc.ru/ntikhomirov/checkoutservice:v0.1.0-demo
+          image: docker.nt33.ru/checkoutservice:v1.0.0
           ports:
           - containerPort: 5050
           readinessProbe:

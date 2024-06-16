@@ -35,6 +35,8 @@ spec:
         runAsGroup: 1000
         runAsNonRoot: true
         runAsUser: 1000
+      imagePullSecrets:
+      - name: nexus-nt33
       containers:
         - name: server
           securityContext:
@@ -44,7 +46,7 @@ spec:
                 - ALL
             privileged: false
             readOnlyRootFilesystem: true
-          image: docker-nexus.bscmsc.ru/ntikhomirov/frontend:v0.1.0-demo
+          image: docker.nt33.ru/frontend:v1.5.0
           ports:
           - containerPort: 8080
           - containerPort: 9100
@@ -136,7 +138,7 @@ metadata:
 spec:
   selector:
     matchLabels:
-      app: frontendf
+      app: frontend
       operated-prometheus: "true"
   namespaceSelector:
     any: true
@@ -144,7 +146,21 @@ spec:
     - interval: 30s
       port: http
       path: /metrics
-
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-external
+  labels:
+    app: frontend
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
@@ -160,4 +176,4 @@ spec:
     matchLabels:
       name: frontend
   podMetricsEndpoints:
-  - targetPort: 8080        
+  - targetPort: 8080
